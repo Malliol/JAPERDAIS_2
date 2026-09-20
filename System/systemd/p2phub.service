@@ -1,0 +1,16 @@
+[Unit]
+Description=P2PHub Chat Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/p2phub
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=3
+StandardOutput=append:/var/log/p2phub.log
+StandardError=append:/var/log/p2phub.log
+
+[Install]
+WantedBy=multi-user.target

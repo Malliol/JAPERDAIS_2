@@ -1,0 +1,13 @@
+[Unit]
+Description=JAPERDAIS Discord bot
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/node /var/www/malliol.ru/sync/discord/bot.mjs
+Restart=always
+RestartSec=3
+User=root
+WorkingDirectory=/var/www/malliol.ru/sync/discord
+
+[Install]
+WantedBy=multi-user.target

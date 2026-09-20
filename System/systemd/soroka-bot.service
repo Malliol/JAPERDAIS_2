@@ -1,0 +1,13 @@
+[Unit]
+Description=SorokaBjastovna Telegram bot (JAPERDAIS)
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/node /var/www/malliol.ru/sync/soroka/bot.mjs
+Restart=always
+RestartSec=3
+User=root
+WorkingDirectory=/var/www/malliol.ru/sync/soroka
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,359 @@
+:root {
+  --bg: #0d1117;
+  --bg2: #161b22;
+  --bg3: #21262d;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #2f81f7;
+  --danger: #da3633;
+  --danger-dark: #b91c1c;
+  --ok: #3fb950;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  font-size: 15px;
+}
+
+/* ===== AUTH ===== */
+.auth-screen {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  padding-top: max(20px, env(safe-area-inset-top));
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+  background: radial-gradient(ellipse at 50% 0%, #161b22 0%, #0d1117 70%);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 36px 32px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+}
+
+.auth-logo-wrap { text-align: center; margin-bottom: 28px; }
+.auth-icon { font-size: 44px; margin-bottom: 10px; }
+.auth-logo { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+.auth-sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+.auth-tabs {
+  display: flex;
+  background: var(--bg3);
+  border-radius: 10px;
+  padding: 3px;
+  margin-bottom: 22px;
+}
+.auth-tab {
+  flex: 1;
+  padding: 9px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.auth-tab.active { background: var(--accent); color: #fff; }
+
+.field-group { margin-bottom: 16px; }
+.field-label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
+
+.field-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: var(--text);
+  font-size: 16px; /* 16px чтобы Safari не зумировал поле */
+  outline: none;
+  transition: border-color 0.15s;
+  -webkit-appearance: none;
+}
+.field-input:focus { border-color: var(--accent); }
+
+.auth-error {
+  color: #f85149;
+  font-size: 13px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: rgba(248,81,73,0.1);
+  border-radius: 8px;
+  border: 1px solid rgba(248,81,73,0.2);
+}
+
+.auth-submit {
+  width: 100%;
+  padding: 14px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 4px;
+  transition: opacity 0.15s, transform 0.1s;
+  -webkit-appearance: none;
+  touch-action: manipulation;
+}
+.auth-submit:hover { opacity: 0.9; }
+.auth-submit:active { transform: scale(0.98); }
+.auth-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ===== APP ===== */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* HEADER */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  padding-top: env(safe-area-inset-top);
+  height: calc(52px + env(safe-area-inset-top));
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.header-left { display: flex; align-items: center; gap: 8px; }
+.header-logo { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
+
+.conn-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: background 0.3s;
+}
+.conn-dot.online { background: var(--ok); }
+.conn-dot.error  { background: var(--danger); }
+.header-status { font-size: 12px; color: var(--muted); }
+
+.logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.logout-btn:hover { background: var(--bg3); color: var(--text); }
+
+/* MAIN */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 40px;
+  padding: 40px 20px;
+  padding-bottom: max(40px, calc(24px + env(safe-area-inset-bottom)));
+  overflow-y: auto;
+}
+
+/* КНОПКА ПИЗДЕЦ */
+.pizdets-btn {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  border: none;
+  background: var(--danger);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  box-shadow:
+    0 0 0 8px rgba(218,54,51,0.15),
+    0 0 0 18px rgba(218,54,51,0.07),
+    0 10px 50px rgba(218,54,51,0.5);
+  transition: transform 0.12s, box-shadow 0.12s, background 0.12s;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  flex-shrink: 0;
+}
+.pizdets-btn:hover {
+  background: var(--danger-dark);
+  box-shadow:
+    0 0 0 10px rgba(218,54,51,0.2),
+    0 0 0 22px rgba(218,54,51,0.1),
+    0 14px 60px rgba(218,54,51,0.6);
+  transform: scale(1.05);
+}
+.pizdets-btn:active { transform: scale(0.93); }
+.pizdets-btn.fire { animation: pfire 0.4s ease; }
+@keyframes pfire {
+  0%  { transform: scale(1); }
+  35% { transform: scale(1.18); }
+  100%{ transform: scale(1); }
+}
+
+/* ОНЛАЙН */
+.online-box {
+  width: 100%;
+  max-width: 360px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.online-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.online-badge {
+  background: var(--ok);
+  color: #0d1117;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 1px 7px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.user-list { list-style: none; }
+
+.user-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.user-item:last-child { border-bottom: none; }
+
+.user-avatar {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.user-name {
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-name-me { color: var(--muted); font-size: 12px; margin-left: 4px; }
+
+.online-empty {
+  padding: 20px 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  opacity: 0.6;
+}
+
+.install-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 360px;
+  padding: 13px 20px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  touch-action: manipulation;
+}
+.install-btn:hover { background: var(--bg2); color: var(--text); border-color: var(--accent); }
+
+/* TOAST */
+.toast {
+  position: fixed;
+  top: calc(62px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  background: var(--danger);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 12px 24px;
+  border-radius: 999px;
+  z-index: 9999;
+  box-shadow: 0 4px 24px rgba(218,54,51,0.5);
+  opacity: 0;
+  transition: opacity 0.22s, transform 0.22s;
+  pointer-events: none;
+  white-space: nowrap;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.hidden { display: none !important; }
+
+/* ===== МОБИЛЬНЫЙ (<= 480px) ===== */
+@media (max-width: 480px) {
+  .auth-card { padding: 28px 20px; border-radius: 16px; }
+
+  .main {
+    gap: 28px;
+    justify-content: space-evenly;
+  }
+
+  .pizdets-btn {
+    width: min(220px, 55vw);
+    height: min(220px, 55vw);
+    font-size: 22px;
+  }
+
+  .online-box { max-width: 100%; }
+  .install-btn { max-width: 100%; }
+
+  .logout-btn span { display: none; }
+  .logout-btn { padding: 10px 12px; }
+}

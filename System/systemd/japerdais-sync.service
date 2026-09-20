@@ -1,0 +1,8 @@
+[Unit]
+Description=JAPERDAIS Notion sync
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/node /var/www/malliol.ru/sync/notion-sync.mjs
+WorkingDirectory=/var/www/malliol.ru/sync

@@ -1,0 +1,13 @@
+[Unit]
+Description=JAPERDAIS DevSpace edit API
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/node /var/www/malliol.ru/sync/devspace-api.mjs
+Restart=always
+RestartSec=3
+User=root
+WorkingDirectory=/var/www/malliol.ru/sync
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Тесты · ОСГОворим</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0d1117; color: #e6edf3; padding: 20px; }
+    h1 { font-size: 18px; }
+    .pass { color: #3fb950; }
+    .fail { color: #f85149; }
+    .row { font-family: ui-monospace, monospace; font-size: 13px; padding: 2px 0; }
+    #summary { margin: 12px 0; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>🧪 Тесты ОСГОворим</h1>
+  <p>Запускаются прямо в браузере — установка не нужна. Открой этот файл по https.</p>
+  <div id="summary">Запускаю…</div>
+  <div id="results"></div>
+
+  <script type="module">
+    import { cases } from "./cases.js";
+    const results = document.getElementById("results");
+    const summary = document.getElementById("summary");
+    let passed = 0, failed = 0;
+    for (const c of cases) {
+      const row = document.createElement("div");
+      row.className = "row";
+      try {
+        c.fn();
+        passed++;
+        row.innerHTML = `<span class="pass">✓</span> ${c.name}`;
+      } catch (e) {
+        failed++;
+        row.innerHTML = `<span class="fail">✗ ${c.name} — ${e.message}</span>`;
+      }
+      results.appendChild(row);
+    }
+    summary.textContent = `Итого: ${passed} прошло, ${failed} провалено (всего ${cases.length}).`;
+    summary.className = failed ? "fail" : "pass";
+    // для автоматической проверки
+    window.__testResult = { passed, failed, total: cases.length };
+  </script>
+</body>
+</html>
