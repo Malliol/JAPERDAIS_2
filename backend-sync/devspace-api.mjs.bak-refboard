@@ -1,0 +1,199 @@
+#!/usr/bin/env node
+// Мини-API для DevSpace: сохраняет правки редактора и графа на диск
+// и ведёт журнал изменений в стиле git-лога (автор, сообщение, diff).
+// Слушает только 127.0.0.1:3017 — наружу отдаётся через nginx (location /api/).
+// Авторизация записи: Authorization: Bearer <EDIT_TOKEN из .env>.
+import { createServer } from 'node:http'
+import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync, readdirSync, unlinkSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const HERE = dirname(fileURLToPath(import.meta.url))
+const HTML_DIR = process.env.DEVSPACE_HTML || join(HERE, '..', 'html')
+const DATA_DIR = join(HTML_DIR, 'data')
+const BACKUP_DIR = join(HERE, 'backups')
+const HISTORY_FILE = join(DATA_DIR, 'history.json')
+const PORT = 3017
+const MAX_ENTRIES = 500
+const MAX_SNAPSHOT = 40000 // символов текста на сторону диффа
+
+function loadEnv() {
+  const envPath = join(HERE, '.env')
+  if (!existsSync(envPath)) return {}
+  const out = {}
+  for (const line of readFileSync(envPath, 'utf8').split('\n')) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/)
+    if (m) out[m[1]] = m[2].replace(/^["']|["']$/g, '')
+  }
+  return out
+}
+const EDIT_TOKEN = loadEnv().EDIT_TOKEN || ''
+
+function log(msg) { console.log(`[${new Date().toISOString()}] ${msg}`) }
+
+// --- история ---
+function readHistory() {
+  try { return JSON.parse(readFileSync(HISTORY_FILE, 'utf8')) } catch { return [] }
+}
+function appendHistory(entry) {
+  const list = readHistory()
+  list.unshift(entry)
+  while (list.length > MAX_ENTRIES) list.pop()
+  writeFileSync(HISTORY_FILE + '.tmp', JSON.stringify(list, null, 1), 'utf8')
+  renameSync(HISTORY_FILE + '.tmp', HISTORY_FILE)
+}
+
+// плоский текст страницы для диффа (по блокам, построчно)
+function richPlain(v) {
+  if (v == null) return ''
+  if (typeof v === 'string') return v
+  return v.map(sp => sp.t || '').join('')
+}
+function pageToText(page) {
+  const lines = []
+  const walk = (blocks, depth) => {
+    for (const b of blocks || []) {
+      const pad = '  '.repeat(depth)
+      const t = richPlain(b.text)
+      if (b.type === 'divider') lines.push(pad + '---')
+      else if (b.type === 'table' && b.props && b.props.rows) {
+        for (const r of b.props.rows) lines.push(pad + '| ' + r.map(richPlain).join(' | '))
+      } else if (t) {
+        const mark = b.type.startsWith('heading') ? '#'.repeat(Number(b.type.slice(-1))) + ' ' :
+          b.type === 'bulleted_list_item' ? '• ' :
+          b.type === 'numbered_list_item' ? '1. ' :
+          b.type === 'quote' ? '> ' :
+          b.type === 'callout' ? '💡 ' : ''
+        for (const line of t.split('\n')) lines.push(pad + mark + line)
+      }
+      if (b.children) walk(b.children, depth + 1)
+    }
+  }
+  lines.push('# ' + (page.title || ''))
+  walk(page.blocks, 0)
+  return lines.join('\n').slice(0, MAX_SNAPSHOT)
+}
+
+function linkLine(l, nodeName) {
+  return `${nodeName(l.from)} → ${nodeName(l.to)} [${l.type}] ${l.label || ''}`.trim()
+}
+function graphToText(g) {
+  const names = Object.fromEntries((g.nodes || []).map(n => [n.id, n.name]))
+  const nn = id => names[id] || id
+  const lines = (g.links || []).map(l => linkLine(l, nn))
+  for (const t of g.types || []) lines.push(`тип: ${t.label} (${t.color}, ${t.dash})`)
+  return lines.join('\n').slice(0, MAX_SNAPSHOT)
+}
+
+// diff изменений workspace: какие страницы добавлены/изменены/удалены
+function diffWorkspace(oldWs, newWs) {
+  const oldBy = Object.fromEntries((oldWs && oldWs.pages || []).map(p => [p.id, p]))
+  const newBy = Object.fromEntries((newWs.pages || []).map(p => [p.id, p]))
+  const changes = []
+  for (const [id, np] of Object.entries(newBy)) {
+    const op = oldBy[id]
+    if (!op) changes.push({ id, title: np.title, action: 'added', before: '', after: pageToText(np) })
+    else if (JSON.stringify({ t: op.title, i: op.icon, b: op.blocks }) !== JSON.stringify({ t: np.title, i: np.icon, b: np.blocks })) {
+      changes.push({ id, title: np.title, action: 'edited', before: pageToText(op), after: pageToText(np) })
+    }
+  }
+  for (const [id, op] of Object.entries(oldBy)) {
+    if (!newBy[id]) changes.push({ id, title: op.title, action: 'removed', before: pageToText(op), after: '' })
+  }
+  return changes
+}
+
+function backup(name) {
+  const src = join(DATA_DIR, name)
+  if (!existsSync(src)) return
+  mkdirSync(BACKUP_DIR, { recursive: true })
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  writeFileSync(join(BACKUP_DIR, `${name}.${stamp}.bak`), readFileSync(src))
+  const all = readdirSync(BACKUP_DIR).filter(f => f.startsWith(name + '.')).sort()
+  while (all.length > 30) unlinkSync(join(BACKUP_DIR, all.shift()))
+}
+
+function saveJson(name, obj) {
+  backup(name)
+  const out = join(DATA_DIR, name)
+  writeFileSync(out + '.tmp', JSON.stringify(obj, null, 1), 'utf8')
+  renameSync(out + '.tmp', out)
+}
+
+function send(res, code, body) {
+  const data = typeof body === 'string' ? body : JSON.stringify(body)
+  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' })
+  res.end(data)
+}
+
+const decodeHdr = v => { try { return decodeURIComponent(v || '') } catch { return v || '' } }
+
+const server = createServer((req, res) => {
+  const url = req.url.split('?')[0]
+
+  if (req.method === 'GET' && url === '/api/health') {
+    return send(res, 200, { ok: true, editTokenSet: !!EDIT_TOKEN })
+  }
+  if (req.method === 'GET' && url === '/api/history') {
+    return send(res, 200, { entries: readHistory() })
+  }
+
+  if (req.method !== 'PUT' || !['/api/workspace', '/api/graph'].includes(url)) {
+    return send(res, 404, { error: 'not found' })
+  }
+
+  if (!EDIT_TOKEN) return send(res, 503, { error: 'EDIT_TOKEN не задан в sync/.env — редактирование выключено' })
+  const auth = req.headers.authorization || ''
+  if (auth !== 'Bearer ' + EDIT_TOKEN) return send(res, 401, { error: 'неверный пароль редактирования' })
+
+  let body = ''
+  let size = 0
+  req.on('data', chunk => {
+    size += chunk.length
+    if (size > 30 * 1024 * 1024) { req.destroy(); return }
+    body += chunk
+  })
+  req.on('end', () => {
+    let obj
+    try { obj = JSON.parse(body) } catch { return send(res, 400, { error: 'некорректный JSON' }) }
+    const author = decodeHdr(req.headers['x-author']) || 'Аноним'
+    const message = decodeHdr(req.headers['x-message'])
+    try {
+      const entry = {
+        id: randomBytes(5).toString('hex'),
+        ts: new Date().toISOString(),
+        author, message,
+        changes: []
+      }
+      if (url === '/api/workspace') {
+        if (!obj || !Array.isArray(obj.pages)) return send(res, 400, { error: 'ожидаю {meta, pages[]}' })
+        let prev = null
+        try { prev = JSON.parse(readFileSync(join(DATA_DIR, 'workspace.json'), 'utf8')) } catch {}
+        entry.kind = 'workspace'
+        entry.changes = diffWorkspace(prev, obj)
+        saveJson('workspace.json', obj)
+        log(`workspace.json сохранён (${obj.pages.length} страниц) — ${author}: ${message || 'без описания'}`)
+      } else {
+        if (!obj || !Array.isArray(obj.nodes) || !Array.isArray(obj.links)) return send(res, 400, { error: 'ожидаю {nodes[], links[], types[]}' })
+        let prev = null
+        try { prev = JSON.parse(readFileSync(join(DATA_DIR, 'graph.json'), 'utf8')) } catch {}
+        entry.kind = 'graph'
+        entry.changes = [{
+          id: 'relations', title: 'Диаграмма отношений', action: 'edited',
+          before: prev ? graphToText(prev) : '',
+          after: graphToText(obj)
+        }]
+        saveJson('graph.json', obj)
+        log(`graph.json сохранён (${obj.links.length} связей) — ${author}: ${message || 'без описания'}`)
+      }
+      if (entry.changes.length) appendHistory(entry)
+      send(res, 200, { ok: true, recorded: entry.changes.length })
+    } catch (e) {
+      log('ОШИБКА записи: ' + e.message)
+      send(res, 500, { error: 'ошибка записи: ' + e.message })
+    }
+  })
+})
+
+server.listen(PORT, '127.0.0.1', () => log(`DevSpace API на 127.0.0.1:${PORT}, данные: ${DATA_DIR}`))

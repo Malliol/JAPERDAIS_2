@@ -1,0 +1,285 @@
+#!/usr/bin/env node
+// Синхронизация контента из Notion в data/workspace.json.
+// Забирает все страницы, которые расшарены интеграции (Connections → ваша интеграция),
+// конвертирует блоки в формат DevSpace, скачивает картинки локально и атомарно
+// перезаписывает workspace.json. Запуск: node notion-sync.mjs (токен — в .env рядом).
+import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync, appendFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const HERE = dirname(fileURLToPath(import.meta.url))
+const HTML_DIR = process.env.DEVSPACE_HTML || join(HERE, '..', 'html')
+const DATA_DIR = join(HTML_DIR, 'data')
+const IMG_DIR = join(DATA_DIR, 'notion')
+const OUT = join(DATA_DIR, 'workspace.json')
+const LOG = join(HERE, 'sync.log')
+
+function log(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}`
+  console.log(line)
+  try { appendFileSync(LOG, line + '\n') } catch {}
+}
+
+// --- .env ---
+function loadEnv() {
+  const envPath = join(HERE, '.env')
+  if (!existsSync(envPath)) return {}
+  const out = {}
+  for (const line of readFileSync(envPath, 'utf8').split('\n')) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/)
+    if (m) out[m[1]] = m[2].replace(/^["']|["']$/g, '')
+  }
+  return out
+}
+const env = loadEnv()
+const TOKEN = process.env.NOTION_TOKEN || env.NOTION_TOKEN
+
+if (!TOKEN || TOKEN === 'PASTE_YOUR_TOKEN_HERE') {
+  log('NOTION_TOKEN не задан. Открой sync/.env и вставь Internal Integration Secret (notion.so/my-integrations). Выход без изменений.')
+  process.exit(0)
+}
+
+// --- Notion API с ретраями и rate limit ---
+const API = 'https://api.notion.com/v1'
+let lastCall = 0
+async function notion(path, opts = {}) {
+  const wait = 340 - (Date.now() - lastCall)
+  if (wait > 0) await new Promise(r => setTimeout(r, wait))
+  lastCall = Date.now()
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const res = await fetch(API + path, {
+      ...opts,
+      headers: {
+        Authorization: 'Bearer ' + TOKEN,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json',
+        ...(opts.headers || {})
+      }
+    })
+    if (res.status === 429 || res.status >= 500) {
+      const retry = Number(res.headers.get('retry-after')) || attempt * 2
+      log(`HTTP ${res.status} на ${path}, повтор через ${retry}с (попытка ${attempt})`)
+      await new Promise(r => setTimeout(r, retry * 1000))
+      continue
+    }
+    if (!res.ok) throw new Error(`Notion API ${res.status} ${path}: ${await res.text()}`)
+    return res.json()
+  }
+  throw new Error('Notion API: исчерпаны попытки для ' + path)
+}
+
+// --- картинки ---
+mkdirSync(IMG_DIR, { recursive: true })
+const downloaded = new Map()
+async function localImage(url) {
+  if (!url) return null
+  const clean = url.split('?')[0]
+  if (downloaded.has(clean)) return downloaded.get(clean)
+  const extM = clean.match(/\.(jpe?g|png|gif|webp|svg|avif)$/i)
+  const ext = extM ? extM[0].toLowerCase() : '.jpg'
+  const name = createHash('sha1').update(clean).digest('hex').slice(0, 16) + ext
+  const rel = 'data/notion/' + name
+  const abs = join(IMG_DIR, name)
+  if (!existsSync(abs)) {
+    try {
+      const res = await fetch(url)
+      if (!res.ok) throw new Error('HTTP ' + res.status)
+      writeFileSync(abs, Buffer.from(await res.arrayBuffer()))
+      log(`картинка: ${name}`)
+    } catch (e) {
+      log(`не скачалась картинка ${clean}: ${e.message}`)
+      downloaded.set(clean, url) // оставляем внешний URL как есть
+      return url
+    }
+  }
+  downloaded.set(clean, rel)
+  return rel
+}
+
+// --- rich text ---
+function spans(rt) {
+  if (!rt || rt.length === 0) return ''
+  const out = rt.map(r => {
+    const a = r.annotations || {}
+    const sp = { t: r.plain_text || '' }
+    if (a.bold) sp.b = 1
+    if (a.italic) sp.i = 1
+    if (a.code) sp.c = 1
+    if (a.strikethrough) sp.s = 1
+    if (a.underline) sp.u = 1
+    if (r.href) sp.a = r.href
+    return sp
+  })
+  if (out.every(sp => Object.keys(sp).length === 1)) return out.map(sp => sp.t).join('')
+  return out
+}
+
+const fileUrl = f => f ? (f.type === 'external' ? f.external.url : f.file && f.file.url) : null
+
+// --- блоки ---
+async function fetchChildren(blockId) {
+  let results = []
+  let cursor
+  do {
+    const q = cursor ? `?page_size=100&start_cursor=${cursor}` : '?page_size=100'
+    const res = await notion(`/blocks/${blockId}/children${q}`)
+    results = results.concat(res.results)
+    cursor = res.has_more ? res.next_cursor : null
+  } while (cursor)
+  return results
+}
+
+const childPagesFound = [] // {id, parentPage, order}
+
+async function mapBlocks(raw, pageId) {
+  const out = []
+  for (const b of raw) {
+    const t = b.type
+    const v = b[t] || {}
+    let block = null
+    switch (t) {
+      case 'paragraph': block = { type: 'paragraph', text: spans(v.rich_text) }; break
+      case 'heading_1': case 'heading_2': case 'heading_3':
+        block = { type: t, text: spans(v.rich_text) }; break
+      case 'bulleted_list_item': case 'numbered_list_item':
+        block = { type: t, text: spans(v.rich_text) }; break
+      case 'to_do':
+        block = { type: 'bulleted_list_item', text: (v.checked ? '☑ ' : '☐ ') + richPlain(v.rich_text) }; break
+      case 'quote': block = { type: 'quote', text: spans(v.rich_text) }; break
+      case 'callout':
+        block = {
+          type: 'callout',
+          props: { icon: v.icon && v.icon.type === 'emoji' ? v.icon.emoji : '💡' },
+          text: spans(v.rich_text)
+        }; break
+      case 'divider': block = { type: 'divider' }; break
+      case 'code':
+        block = { type: 'code', props: { language: v.language }, text: richPlain(v.rich_text) }; break
+      case 'image': {
+        const src = await localImage(fileUrl(v))
+        block = { type: 'image', props: { src }, text: v.caption && v.caption.length ? spans(v.caption) : undefined }
+        break
+      }
+      case 'bookmark':
+        block = { type: 'bookmark', props: { url: v.url }, text: v.caption && v.caption.length ? spans(v.caption) : v.url }; break
+      case 'toggle': block = { type: 'toggle', text: spans(v.rich_text) }; break
+      case 'child_page':
+        childPagesFound.push({ id: b.id.replace(/-/g, ''), parentPage: pageId, order: out.length })
+        continue // страница появится в дереве сама
+      case 'table': {
+        const rows = await fetchChildren(b.id)
+        block = {
+          type: 'table',
+          props: {
+            hasHeader: !!v.has_column_header,
+            rows: rows.filter(r => r.type === 'table_row').map(r => r.table_row.cells.map(spans))
+          }
+        }
+        break
+      }
+      case 'column_list': case 'column': case 'synced_block': {
+        const kids = await mapBlocks(await fetchChildren(b.id), pageId)
+        out.push(...kids)
+        continue
+      }
+      case 'video': case 'embed': case 'file': case 'pdf': {
+        const url = v.url || fileUrl(v)
+        if (url) block = { type: 'bookmark', props: { url }, text: t + ': ' + url }
+        break
+      }
+      default:
+        if (v.rich_text && v.rich_text.length) block = { type: 'paragraph', text: spans(v.rich_text) }
+    }
+    if (!block) continue
+    if (b.has_children && !['table', 'child_page', 'column_list', 'column', 'synced_block'].includes(t)) {
+      block.children = await mapBlocks(await fetchChildren(b.id), pageId)
+    }
+    out.push(block)
+  }
+  return out
+}
+const richPlain = rt => (rt || []).map(r => r.plain_text || '').join('')
+
+// --- страницы ---
+async function run() {
+  log('=== старт синхронизации ===')
+  let pagesRaw = []
+  let cursor
+  do {
+    const res = await notion('/search', {
+      method: 'POST',
+      body: JSON.stringify({
+        filter: { value: 'page', property: 'object' },
+        page_size: 100,
+        ...(cursor ? { start_cursor: cursor } : {})
+      })
+    })
+    pagesRaw = pagesRaw.concat(res.results)
+    cursor = res.has_more ? res.next_cursor : null
+  } while (cursor)
+
+  pagesRaw = pagesRaw.filter(p => !p.archived && !p.in_trash)
+  log(`страниц доступно: ${pagesRaw.length}`)
+  if (pagesRaw.length === 0) {
+    log('Notion не вернул ни одной страницы — проверь, что страницы расшарены интеграции (… → Connections). workspace.json не тронут.')
+    return
+  }
+
+  const knownIds = new Set(pagesRaw.map(p => p.id.replace(/-/g, '')))
+  const notionPages = []
+  for (const pr of pagesRaw) {
+    const id = pr.id.replace(/-/g, '')
+    const titleProp = Object.values(pr.properties || {}).find(x => x.type === 'title')
+    const title = richPlain(titleProp && titleProp.title) || 'Без названия'
+    log(`страница: ${title}`)
+    const parentRaw = pr.parent && pr.parent.type === 'page_id' ? pr.parent.page_id.replace(/-/g, '') : null
+    const cover = pr.cover ? await localImage(fileUrl(pr.cover)) : undefined
+    const icon = pr.icon && pr.icon.type === 'emoji' ? pr.icon.emoji : undefined
+    const blocks = await mapBlocks(await fetchChildren(pr.id), id)
+    notionPages.push({
+      id, title, icon, cover,
+      parent: parentRaw && knownIds.has(parentRaw) ? parentRaw : null,
+      updated: (pr.last_edited_time || '').slice(0, 10),
+      origin: 'notion',
+      blocks
+    })
+  }
+
+  // порядок детей — как в родительской странице (child_page блоки)
+  const orderMap = new Map(childPagesFound.map(c => [c.id, c.order]))
+  notionPages.sort((a, b) => {
+    if (a.parent !== b.parent) return 0
+    return (orderMap.get(a.id) ?? 999) - (orderMap.get(b.id) ?? 999)
+  })
+
+  // Слияние: затравочные (seed) и созданные на сайте (custom) страницы остаются,
+  // Notion-страницы обновляются целиком.
+  let keptPages = []
+  if (existsSync(OUT)) {
+    try {
+      const prev = JSON.parse(readFileSync(OUT, 'utf8'))
+      keptPages = (prev.pages || []).filter(p => p.origin !== 'notion')
+    } catch (e) {
+      log('не смог прочитать старый workspace.json (' + e.message + '), продолжаю без слияния')
+    }
+  }
+  const pages = [...keptPages, ...notionPages]
+  log(`слияние: сохранено локальных страниц ${keptPages.length}, из Notion ${notionPages.length}`)
+
+  const workspace = {
+    meta: {
+      workspace: 'JAPERDAIS',
+      source: 'notion',
+      generated: new Date().toISOString(),
+      lastSync: new Date().toISOString().slice(0, 16).replace('T', ' ')
+    },
+    pages
+  }
+  mkdirSync(DATA_DIR, { recursive: true })
+  writeFileSync(OUT + '.tmp', JSON.stringify(workspace, null, 1), 'utf8')
+  renameSync(OUT + '.tmp', OUT)
+  log(`=== готово: ${pages.length} страниц → ${OUT} ===`)
+}
+
+run().catch(e => { log('ОШИБКА: ' + (e.stack || e.message)); process.exit(1) })
