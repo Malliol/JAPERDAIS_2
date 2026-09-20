@@ -1,0 +1,151 @@
+{
+ "locations": [
+  {
+   "id": "loc_mrmomsw13i6l",
+   "title": "Новая локация"
+  }
+ ],
+ "maps": [
+  {
+   "id": "m_mrmomvl458pa",
+   "locationId": "loc_mrmomsw13i6l",
+   "title": "Этаж 1",
+   "order": 0
+  }
+ ],
+ "blocks": [
+  {
+   "id": "b_mrmon0y5xbuq",
+   "mapId": "m_mrmomvl458pa",
+   "kind": "room",
+   "x": 12,
+   "y": 5,
+   "w": 6,
+   "h": 7,
+   "color": "#e0a030",
+   "label": "Комната"
+  },
+  {
+   "id": "b_mrmon2z5701t",
+   "mapId": "m_mrmomvl458pa",
+   "kind": "furniture",
+   "x": 12,
+   "y": 6,
+   "w": 2,
+   "h": 1,
+   "color": "#6b4a2c",
+   "label": "Мебель"
+  },
+  {
+   "id": "b_mrmona9d9iav",
+   "mapId": "m_mrmomvl458pa",
+   "kind": "furniture",
+   "x": 12,
+   "y": 8,
+   "w": 1,
+   "h": 3,
+   "color": "#6b4a2c",
+   "label": "Мебель"
+  },
+  {
+   "id": "b_mrmonlyx0c0j",
+   "mapId": "m_mrmomvl458pa",
+   "kind": "room",
+   "x": 18,
+   "y": 5,
+   "w": 1,
+   "h": 14,
+   "color": "#8a8a8a",
+   "label": "Комната"
+  },
+  {
+   "id": "b_mrmonrita99h",
+   "mapId": "m_mrmomvl458pa",
+   "kind": "room",
+   "x": 19,
+   "y": 5,
+   "w": 7,
+   "h": 7,
+   "color": "#e0a030",
+   "label": "Спальня"
+  },
+  {
+   "id": "b_mrmonz1fto74",
+   "mapId": "m_mrmomvl458pa",
+   "kind": "room",
+   "x": 16,
+   "y": 19,
+   "w": 5,
+   "h": 5,
+   "color": "#3d7fd6",
+   "label": "Вход/О"
+  },
+  {
+   "id": "b_mrmoo61x7z6c",
+   "mapId": "m_mrmomvl458pa",
+   "kind": "room",
+   "x": 19,
+   "y": 12,
+   "w": 7,
+   "h": 7,
+   "color": "#e0a030",
+   "label": "Комната"
+  },
+  {
+   "id": "b_mrmooifoahu2",
+   "mapId": "m_mrmomvl458pa",
+   "kind": "room",
+   "x": 12,
+   "y": 12,
+   "w": 6,
+   "h": 7,
+   "color": "#e0a030",
+   "label": "Комната"
+  },
+  {
+   "id": "b_mrmooqqiwfio",
+   "mapId": "m_mrmomvl458pa",
+   "kind": "stairs",
+   "x": 17,
+   "y": 3,
+   "w": 3,
+   "h": 2,
+   "color": "#8a8a8a",
+   "label": "Лестница"
+  },
+  {
+   "id": "b_mrmoowdo2r8e",
+   "mapId": "m_mrmomvl458pa",
+   "kind": "furniture",
+   "x": 24,
+   "y": 13,
+   "w": 2,
+   "h": 1,
+   "color": "#6b4a2c",
+   "label": "Мебель"
+  },
+  {
+   "id": "b_mrmooylyctgc",
+   "mapId": "m_mrmomvl458pa",
+   "kind": "furniture",
+   "x": 24,
+   "y": 15,
+   "w": 2,
+   "h": 1,
+   "color": "#6b4a2c",
+   "label": "Мебель"
+  },
+  {
+   "id": "b_mrmop068cvhv",
+   "mapId": "m_mrmomvl458pa",
+   "kind": "furniture",
+   "x": 19,
+   "y": 13,
+   "w": 2,
+   "h": 1,
+   "color": "#6b4a2c",
+   "label": "Мебель"
+  }
+ ],
+ "texts": []
+}

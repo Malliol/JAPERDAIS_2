@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>SorokaBjastovna</title>
+<style>
+  :root {
+    --bg: #ffffff; --text: #1c1c1c; --hint: #6d6d71; --link: #2678b6;
+    --button: #2678b6; --button-text: #ffffff; --secondary-bg: #f0f0f3;
+    --border: rgba(0,0,0,0.12); --danger: #cc1133;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    font-size: 15px; line-height: 1.45;
+    padding-bottom: 24px;
+  }
+  .head { padding: 16px 16px 4px; }
+  .head h1 { font-size: 18px; font-weight: 700; margin: 0 0 2px; }
+  .head p { font-size: 12.5px; color: var(--hint); margin: 0; }
+
+  .tabs { display: flex; gap: 6px; padding: 10px 16px; }
+  .tab {
+    flex: 1; text-align: center; padding: 9px 6px; border-radius: 8px;
+    font-size: 13px; font-weight: 600; cursor: pointer; user-select: none;
+    background: var(--secondary-bg); color: var(--hint);
+  }
+  .tab.active { background: var(--button); color: var(--button-text); }
+
+  .panel { display: none; padding: 4px 16px 16px; }
+  .panel.active { display: block; }
+
+  .empty { text-align: center; color: var(--hint); font-size: 13px; padding: 30px 10px; }
+
+  .req-card {
+    border: 1px solid var(--border); border-radius: 10px; padding: 12px 12px 10px;
+    margin-bottom: 10px; background: var(--secondary-bg);
+  }
+  .req-meta { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+  .req-who { font-size: 12px; font-weight: 600; color: var(--hint); }
+  .req-when { font-size: 11px; color: var(--hint); white-space: nowrap; }
+  .req-text { font-size: 14px; white-space: pre-wrap; word-break: break-word; margin-bottom: 8px; }
+  .req-chat { font-size: 11px; color: var(--hint); margin-bottom: 8px; }
+  .req-actions { display: flex; gap: 8px; }
+  .btn {
+    border: none; border-radius: 7px; padding: 8px 12px; font-size: 12.5px; font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-del { background: var(--danger); color: #fff; }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+
+  .chat-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px;
+    margin-bottom: 8px; cursor: pointer;
+  }
+  .chat-item.selected { border-color: var(--button); background: var(--secondary-bg); }
+  .chat-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-sub { font-size: 11px; color: var(--hint); }
+
+  .composer { margin-top: 14px; }
+  .composer textarea {
+    width: 100%; min-height: 90px; resize: vertical;
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+    font-family: inherit; font-size: 14px; background: var(--bg); color: var(--text);
+  }
+  .composer textarea:focus { outline: none; border-color: var(--button); }
+  .send-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; gap: 8px; }
+  .send-hint { font-size: 11.5px; color: var(--hint); }
+  .btn-send { background: var(--button); color: var(--button-text); padding: 9px 18px; }
+  .btn-send:disabled { opacity: 0.5; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    background: var(--text); color: var(--bg); font-size: 12.5px; font-weight: 600;
+    padding: 8px 14px; border-radius: 20px; opacity: 0; pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .toast.show { opacity: 0.95; }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>Панель Сороки Бjастовны</h1>
+  <p id="who">Проверяю доступ…</p>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="requests">Заявки</div>
+  <div class="tab" data-tab="chats">Чаты</div>
+</div>
+
+<div class="panel active" id="panel-requests">
+  <div id="requests-list" class="empty">Загрузка…</div>
+</div>
+
+<div class="panel" id="panel-chats">
+  <div id="chats-list" class="empty">Загрузка…</div>
+  <div class="composer" id="composer" style="display:none">
+    <textarea id="msg-text" placeholder="Сообщение от имени Сороки в выбранный чат…"></textarea>
+    <div class="send-row">
+      <span class="send-hint" id="send-target"></span>
+      <button class="btn btn-send" id="send-btn">Отправить</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>
+(function(){
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) { tg.ready(); tg.expand(); }
+  const initData = tg ? tg.initData : '';
+
+  // подхватываем тему Telegram, если доступна
+  if (tg && tg.themeParams) {
+    const p = tg.themeParams;
+    const root = document.documentElement.style;
+    if (p.bg_color) root.setProperty('--bg', p.bg_color);
+    if (p.text_color) root.setProperty('--text', p.text_color);
+    if (p.hint_color) root.setProperty('--hint', p.hint_color);
+    if (p.button_color) root.setProperty('--button', p.button_color);
+    if (p.button_text_color) root.setProperty('--button-text', p.button_text_color);
+    if (p.secondary_bg_color) root.setProperty('--secondary-bg', p.secondary_bg_color);
+  }
+
+  const whoEl = document.getElementById('who');
+  const toastEl = document.getElementById('toast');
+  function toast(text) {
+    toastEl.textContent = text;
+    toastEl.classList.add('show');
+    setTimeout(() => toastEl.classList.remove('show'), 2200);
+  }
+
+  async function api(path, extra) {
+    const res = await fetch('/soroka' + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData, ...(extra || {}) })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    return data;
+  }
+
+  // ---------- вкладки ----------
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+    });
+  });
+
+  const STATUS_LABEL = { new: '🆕 новый', discussing: '💬 обсуждаем', done: '✅ сделано', declined: '➖ отклонено' };
+
+  function fmtDate(iso) {
+    try { return new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+    catch { return iso; }
+  }
+
+  // ---------- заявки ----------
+  async function loadRequests() {
+    const list = document.getElementById('requests-list');
+    try {
+      const { requests } = await api('/api/requests');
+      if (!requests.length) { list.innerHTML = '<div class="empty">Заявок пока нет</div>'; return; }
+      list.innerHTML = '';
+      requests.forEach(r => {
+        const card = document.createElement('div');
+        card.className = 'req-card';
+        card.innerHTML = `
+          <div class="req-meta">
+            <span class="req-who">${escapeHtml(r.firstName || r.username || 'без имени')}${STATUS_LABEL[r.status] ? ' · ' + STATUS_LABEL[r.status] : ''}</span>
+            <span class="req-when">${fmtDate(r.ts)}</span>
+          </div>
+          <div class="req-text">${escapeHtml(r.text)}</div>
+          <div class="req-chat">чат ${r.chatId}${r.threadId ? ' · тема ' + r.threadId : ''}</div>
+          <div class="req-actions">
+            <button class="btn btn-del" data-id="${r.id}">Удалить</button>
+          </div>`;
+        list.appendChild(card);
+      });
+      list.querySelectorAll('.btn-del').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          try {
+            await api('/api/requests/delete', { id: btn.dataset.id });
+            btn.closest('.req-card').remove();
+            toast('Удалено');
+            if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+          } catch (e) { toast('Ошибка: ' + e.message); btn.disabled = false; }
+        });
+      });
+    } catch (e) {
+      list.innerHTML = '<div class="empty">Не удалось загрузить: ' + escapeHtml(e.message) + '</div>';
+    }
+  }
+
+  // ---------- чаты ----------
+  let selectedChat = null;
+  async function loadChats() {
+    const list = document.getElementById('chats-list');
+    try {
+      const { chats } = await api('/api/chats');
+      if (!chats.length) { list.innerHTML = '<div class="empty">Бот пока никому не писал — добавь его в чат и напиши там /inf</div>'; return; }
+      list.innerHTML = '';
+      chats.forEach(c => {
+        const item = document.createElement('div');
+        item.className = 'chat-item';
+        const typeLabel = c.type === 'private' ? 'личка' : (c.threadId ? 'тема в группе' : 'группа');
+        item.innerHTML = `<div class="chat-name">${escapeHtml(c.title || String(c.chatId))}</div><div class="chat-sub">${typeLabel}</div>`;
+        item.addEventListener('click', () => {
+          document.querySelectorAll('.chat-item').forEach(i => i.classList.remove('selected'));
+          item.classList.add('selected');
+          selectedChat = c;
+          document.getElementById('composer').style.display = 'block';
+          document.getElementById('send-target').textContent = 'В: ' + (c.title || c.chatId) + (c.threadId ? ' (тема)' : '');
+        });
+        list.appendChild(item);
+      });
+    } catch (e) {
+      list.innerHTML = '<div class="empty">Не удалось загрузить: ' + escapeHtml(e.message) + '</div>';
+    }
+  }
+
+  document.getElementById('send-btn').addEventListener('click', async () => {
+    const ta = document.getElementById('msg-text');
+    const text = ta.value.trim();
+    if (!text || !selectedChat) return;
+    const btn = document.getElementById('send-btn');
+    btn.disabled = true;
+    try {
+      await api('/api/send', { chatId: selectedChat.chatId, threadId: selectedChat.threadId, text });
+      ta.value = '';
+      toast('Отправлено');
+      if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    } catch (e) {
+      toast('Ошибка: ' + e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+  }
+
+  // ---------- старт ----------
+  if (!tg || !initData) {
+    whoEl.textContent = 'Открой панель из Telegram (кнопка в боте) — вне приложения она не работает.';
+  } else {
+    const u = tg.initDataUnsafe && tg.initDataUnsafe.user;
+    whoEl.textContent = u ? ('Вошёл как ' + (u.first_name || u.username || u.id)) : 'Готово';
+    loadRequests();
+    loadChats();
+  }
+})();
+</script>
+</body>
+</html>
